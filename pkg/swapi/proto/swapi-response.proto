@@ -1,0 +1,26 @@
+syntax = "proto3";
+package swapi;
+
+message SwapiResponse {
+    int32 count = 1;
+    string next = 2;
+    string previous = 3;
+    repeated SwapiPlanetResponse results = 4;
+}
+
+message SwapiPlanetResponse {
+    string name = 1;
+    string rotation_period = 2;
+    string orbital_period = 3;
+    string diameter = 4;
+    string climate = 5;
+    string gravity = 6;
+    string terrain = 7;
+    string surface_water = 8;
+    string population = 9;
+    repeated string residents = 10;
+    repeated string films = 11;
+    string created = 12;
+    string edited = 13;
+    string url = 14;
+}

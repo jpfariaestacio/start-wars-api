@@ -1,0 +1,9 @@
+syntax = "proto3";
+package v1;
+
+message PlanetCollection {
+    string name = 1;
+    string climate =  2;
+    repeated string terrain = 3;
+    int32 timesOnMovies = 4;
+}
