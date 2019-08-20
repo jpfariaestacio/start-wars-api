@@ -3,10 +3,15 @@ module github.com/nicolasassi/starWarsApi
 go 1.12
 
 require (
+	github.com/amsokol/mongo-go-driver-protobuf v1.0.0-rc5 // indirect
+	github.com/amsokol/protoc-gen-gotag v0.2.1 // indirect
+	github.com/fatih/structtag v1.0.0 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/golang/protobuf v1.3.2
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/google/go-cmp v0.3.1 // indirect
+	github.com/lyft/protoc-gen-star v0.4.11 // indirect
+	github.com/spf13/afero v1.2.2 // indirect
 	github.com/stretchr/testify v1.4.0 // indirect
 	github.com/tidwall/pretty v1.0.0 // indirect
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c // indirect

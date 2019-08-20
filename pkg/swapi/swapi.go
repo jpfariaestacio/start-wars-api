@@ -5,6 +5,7 @@ import (
 	fmt "fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/golang/protobuf/jsonpb"
@@ -15,19 +16,40 @@ const (
 )
 
 // Client requests information from Swapi/planets and parses the JSON response to a proto response
-func Client(uri string) (SwapiResponse, error) {
-	sr := SwapiResponse{}
-	resp, err := http.Get(uri)
+func Client(uri string) (interface{}, error) {
+	url, err := url.Parse(uri)
 	if err != nil {
-		return sr, err
+		return nil, err
+	}
+	resp, err := http.Get(url.String())
+	if err != nil {
+		return nil, err
 	} else if resp.StatusCode != 200 {
-		return sr, fmt.Errorf("Requesting to %s returned %v not 200", uri, resp.StatusCode)
+		return nil, fmt.Errorf("Requesting to %s returned %v not 200", uri, resp.StatusCode)
 	}
 	defer resp.Body.Close()
-	if err := jsonpb.UnmarshalNext(json.NewDecoder(resp.Body), &sr); err != nil {
-		return sr, err
+	query := url.Query()
+	switch query.Get("page") {
+	case "":
+		sr := SwapiPlanetResponse{}
+		if err := jsonpb.UnmarshalNext(json.NewDecoder(resp.Body), &SwapiPlanetResponse{}); err != nil {
+			return sr, err
+		}
+	default:
+		sr := SwapiResponse{}
+		if err := jsonpb.UnmarshalNext(json.NewDecoder(resp.Body), &SwapiResponse{}); err != nil {
+			return sr, err
+		}
 	}
-	return sr, nil
+	return nil, nil
+}
+
+func GetPlanet(id int) (SwapiPlanetResponse, error) {
+	resp, err := Client(buildPlanetRequest(id))
+	if err != nil {
+		return resp.(SwapiPlanetResponse), err
+	}
+	return resp.(SwapiPlanetResponse), nil
 }
 
 // RetriveAllPlanets requests all pages from Swapi/planets returning its data
@@ -40,7 +62,7 @@ func RetriveAllPlanets(numberOfPages int) []SwapiResponse {
 			if err != nil {
 				log.Fatal(err)
 			}
-			c <- resp
+			c <- resp.(SwapiResponse)
 		}(i)
 	}
 	go func(srs *[]SwapiResponse) {
@@ -61,11 +83,15 @@ func buildPage(page int) string {
 	return fmt.Sprintf("%s/?page=%s", planetsEndPoint, strconv.Itoa(page))
 }
 
+func buildPlanetRequest(id int) string {
+	return fmt.Sprintf("%s/%s", planetsEndPoint, strconv.Itoa(id))
+}
+
 // GetTotalPages returns the number os pages necessary to get all planets.
 func GetTotalPages() (int, error) {
 	firstPage, err := Client(planetsEndPoint)
 	if err != nil {
 		return 0, err
 	}
-	return int(firstPage.GetCount() / 10), nil
+	return int(firstPage.(SwapiResponse).Count / 10), nil
 }
