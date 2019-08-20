@@ -1,32 +1,58 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/nicolasassi/starWarsApi/pkg/cmd/db"
 	"github.com/nicolasassi/starWarsApi/pkg/swapi"
 )
 
-var cfg db.Config
+var (
+	cfg      db.Config
+	userResp string
+)
+
+func init() {
+	f, err := os.Open("cmd/.env")
+	if err != nil {
+		log.Fatal("error while opening your .env file")
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		rawKeyValuePair := strings.Split(scanner.Text(), "=")
+		os.Setenv(rawKeyValuePair[0], rawKeyValuePair[1])
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+}
 
 func init() {
 	flag.StringVar(&cfg.DBHost, "db-host", "localhost", "Database host")
 	flag.StringVar(&cfg.DBUser, "db-user", "", "Database user")
 	flag.StringVar(&cfg.DBPassword, "db-password", "", "Database password")
 	flag.StringVar(&cfg.DBPort, "db-port", "27017", "Database port")
-	flag.StringVar(&cfg.DBName, "db-name", "starWarsDB", "Database name")
+	flag.StringVar(&cfg.DBName, "db-name", "star_wars_db_v1", "Database name")
 	flag.BoolVar(&cfg.DBGenerate, "db-generate", false, "// If true initialize the MongoDB database with default data and schema")
 	flag.BoolVar(&cfg.DBUpdate, "db-update", false, "If true updates values in the MongoDB by comparing with those in https://swapi.co/")
 	flag.Parse()
 }
 
 func init() {
-	var userResp string
 	if cfg.DBGenerate {
-		fmt.Println(fmt.Sprintf("db-generate is set to TRUE. If there is a database identified as %s in your server it will be dumped and a new database with the same name and default values will be created. Are you sure? [y/n]", cfg.DBName))
+		warningMessageRaw, ok := os.LookupEnv("DB-GENERATE-WARNING-MESSAGE")
+		if !ok {
+			log.Fatal("error in your .ENV file")
+		}
+		warningMessage := strings.Split(warningMessageRaw, "%s")
+		fmt.Println(warningMessage[0], cfg.DBName, warningMessage[1])
 		fmt.Scan(&userResp)
 		switch userResp {
 		case "y":
@@ -38,8 +64,16 @@ func init() {
 			os.Exit(0)
 		}
 	}
+}
+
+func init() {
 	if cfg.DBUpdate {
-		fmt.Println(fmt.Sprintf("db-update is set to TRUE. It might overwrite values set by your users in %s. Are you sure? [y/n]", cfg.DBName))
+		warningMessageRaw, ok := os.LookupEnv("DB-UPDATE-WARNING-MESSAGE")
+		if !ok {
+			log.Fatal("error in your .ENV file")
+		}
+		warningMessage := strings.Split(warningMessageRaw, "%s")
+		fmt.Println(warningMessage[0], cfg.DBName, warningMessage[1])
 		fmt.Scan(&userResp)
 		switch userResp {
 		case "y":
@@ -64,7 +98,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	allValues := swapi.RetiveAllPlanets(tp)
+	allValues := swapi.RetriveAllPlanets(tp)
 	for _, v := range allValues {
 		for _, v1 := range v.GetResults() {
 			fmt.Println(v1)

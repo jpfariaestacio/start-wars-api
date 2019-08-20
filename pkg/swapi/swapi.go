@@ -14,11 +14,14 @@ const (
 	planetsEndPoint = "https://swapi.co/api/planets"
 )
 
-func GetSwapi(uri string) (SwapiResponse, error) {
+// Client requests information from Swapi/planets and parses the JSON response to a proto response
+func Client(uri string) (SwapiResponse, error) {
 	sr := SwapiResponse{}
 	resp, err := http.Get(uri)
 	if err != nil {
 		return sr, err
+	} else if resp.StatusCode != 200 {
+		return sr, fmt.Errorf("Requesting to %s returned %v not 200", uri, resp.StatusCode)
 	}
 	defer resp.Body.Close()
 	if err := jsonpb.UnmarshalNext(json.NewDecoder(resp.Body), &sr); err != nil {
@@ -27,12 +30,13 @@ func GetSwapi(uri string) (SwapiResponse, error) {
 	return sr, nil
 }
 
-func RetiveAllPlanets(numberOfPages int) []SwapiResponse {
+// RetriveAllPlanets requests all pages from Swapi/planets returning its data
+func RetriveAllPlanets(numberOfPages int) []SwapiResponse {
 	c := make(chan SwapiResponse)
 	srs := []SwapiResponse{}
 	for i := 1; i <= numberOfPages; i++ {
 		go func(page int) {
-			resp, err := GetSwapi(fmt.Sprintf("%s/?page=%s", planetsEndPoint, strconv.Itoa(page)))
+			resp, err := Client(buildPage(page))
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -53,8 +57,13 @@ func RetiveAllPlanets(numberOfPages int) []SwapiResponse {
 	return srs
 }
 
+func buildPage(page int) string {
+	return fmt.Sprintf("%s/?page=%s", planetsEndPoint, strconv.Itoa(page))
+}
+
+// GetTotalPages returns the number os pages necessary to get all planets.
 func GetTotalPages() (int, error) {
-	firstPage, err := GetSwapi(planetsEndPoint)
+	firstPage, err := Client(planetsEndPoint)
 	if err != nil {
 		return 0, err
 	}

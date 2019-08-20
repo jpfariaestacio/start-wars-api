@@ -1,9 +1,12 @@
 syntax = "proto3";
 package v1;
 
+import "google/protobuf/timestamp.proto";
+
 message PlanetCollection {
     string name = 1;
     string climate =  2;
     repeated string terrain = 3;
     int32 timesOnMovies = 4;
+    google.protobuf.Timestamp added_at = 5;
 }
