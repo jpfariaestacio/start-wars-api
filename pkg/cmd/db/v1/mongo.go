@@ -3,6 +3,7 @@ package v1
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 
 	"github.com/golang/protobuf/jsonpb"
@@ -86,6 +87,8 @@ func swapiToPlanetProto(swapiPlanet swapi.SwapiPlanetResponse) (Planet, error) {
 	return planet, nil
 }
 
+// Generate creates a new database by using the given database name and default data
+// TODO
 func (m *Mongo) Generate() error {
 	return nil
 }
@@ -100,6 +103,8 @@ func (m *Mongo) DeletePlanet(id int) error {
 	return nil
 }
 
+// AddPlanet checks if the planet data already is a document in the mongodb
+// by checking the planet name
 func (m *Mongo) AddPlanet(planet Planet) error {
 	p, err := m.FindByName(planet.GetName())
 	if err != nil {
@@ -121,15 +126,21 @@ func (m *Mongo) AddPlanet(planet Planet) error {
 	return nil
 }
 
+// GetTimeOnMovies requests the data from swapi/planets and parses the times on movies of
+// the given planet returing zero if the planet is not part of the swapi/planets dataset
 func (m *Mongo) GetTimeOnMovies(id int) (int, error) {
 	SwapiPlanetResponse, err := swapi.RetrivePlanet(id)
+	if strings.HasSuffix(err.Error(), "NotFound") {
+		return 0, nil
+	}
 	if err != nil {
 		return 0, err
 	}
 	return len(SwapiPlanetResponse.GetFilms()), nil
 }
 
-func (m *Mongo) FindById(id int) (*Planet, error) {
+// FindByID returns the planet information by searching it by id in the mongodb database
+func (m *Mongo) FindByID(id int) (*Planet, error) {
 	planet := new(Planet)
 	if err := m.Collection.FindOne(*m.Ctx, bson.M{"id": id}).Decode(&planet); err != nil {
 		return nil, err
@@ -137,6 +148,7 @@ func (m *Mongo) FindById(id int) (*Planet, error) {
 	return planet, nil
 }
 
+// FindByName returns the planet information by searching it by name in the mongodb database
 func (m *Mongo) FindByName(name string) (*Planet, error) {
 	planet := new(Planet)
 	if err := m.Collection.FindOne(*m.Ctx, bson.M{"name": name}).Decode(&planet); err != nil {
@@ -145,6 +157,8 @@ func (m *Mongo) FindByName(name string) (*Planet, error) {
 	return planet, nil
 }
 
+// WaitToCancelContext just to remember after
+// TODO will became a select statmemnt
 func (m *Mongo) WaitToCancelContext() {
 	<-m.CancelSinal
 	m.Cancel()

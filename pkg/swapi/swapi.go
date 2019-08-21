@@ -27,10 +27,14 @@ func Client(uri string) (interface{}, error) {
 	resp, err := http.Get(url.String())
 	if err != nil {
 		return nil, err
-	} else if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("Requesting to %s returned %v not 200", uri, resp.StatusCode)
 	}
 	defer resp.Body.Close()
+	if planetMatchPattern.Match([]byte(uri)) && resp.StatusCode == 404 {
+		return nil, fmt.Errorf("the request to %s returned error: NotFound", uri)
+	}
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("Requesting to %s returned %v not 200", uri, resp.StatusCode)
+	}
 	assertedType, err := assertResponseType(url, json.NewDecoder(resp.Body))
 	if err != nil {
 		return nil, err
@@ -45,7 +49,7 @@ func assertResponseType(uri *url.URL, resp *json.Decoder) (interface{}, error) {
 		if err := jsonpb.UnmarshalNext(resp, &sr); err != nil {
 			return nil, err
 		}
-		id, err := getPlanetId(uri.String())
+		id, err := getPlanetID(uri.String())
 		if err != nil {
 			return nil, err
 		}
@@ -59,7 +63,7 @@ func assertResponseType(uri *url.URL, resp *json.Decoder) (interface{}, error) {
 	return sr, nil
 }
 
-func getPlanetId(uri string) (int, error) {
+func getPlanetID(uri string) (int, error) {
 	subgroups := planetMatchPattern.FindStringSubmatch(uri)
 	if len(subgroups) <= 1 {
 		return 0, fmt.Errorf("the uri %s does not have a planet id", uri)
