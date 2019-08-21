@@ -29,7 +29,7 @@ func Client(uri string) (interface{}, error) {
 	}
 	defer resp.Body.Close()
 	query := url.Query()
-	// TODO
+	// TODO FIX THIS SWITCH TO GET THE CORRECT VALUES
 	switch query.Get("page") {
 	case "":
 		sr := SwapiPlanetResponse{}
