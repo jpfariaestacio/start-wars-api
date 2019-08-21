@@ -3,6 +3,7 @@ package v1
 import (
 	"context"
 	"encoding/json"
+	"sync"
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/ptypes"
@@ -11,6 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// Handler abstracts the methods to interact with a mongo collection
 type Handler interface {
 	AddPlanet(interface{}) error
 	ListPlanets() ([]Planet, error)
@@ -19,10 +21,12 @@ type Handler interface {
 	RemovePlanet(id int) error
 }
 
+// NewHandler returns a Handler to abstract the methods to interact with the mongo collection
 func NewHandler() *Handler {
 	return new(Handler)
 }
 
+// Mongo control the behavior of the Mongo collection and interaction
 type Mongo struct {
 	Ctx         *context.Context
 	CancelSinal chan struct{}
@@ -30,24 +34,44 @@ type Mongo struct {
 	Collection  *mongo.Collection
 }
 
+// NewMongo creates a new Mongo intance of the version 1
 func NewMongo(ctx context.Context, db *mongo.Database, collectionName string) *Mongo {
 	ctx, cancel := context.WithCancel(ctx)
 	cancelSinal := make(chan struct{}, 1)
 	return &Mongo{&ctx, cancelSinal, cancel, db.Collection(collectionName)}
 }
 
+// Update retrives all planets from swapi/planets and update its values in the given mongo collection
 func (m *Mongo) Update(planets swapi.SwapiResponse) error {
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // Make sure it's called to release resources even if no errors
+	errorChan := make(chan error, len(planets.GetResults()))
 	for _, planet := range planets.GetResults() {
+		wg.Add(1)
 		go func(swapiPlanet *swapi.SwapiPlanetResponse) {
+			defer wg.Done()
+			select {
+			case <-ctx.Done():
+				errorChan <- nil
+			default:
+			}
 			planet, err := swapiToPlanetProto(*swapiPlanet)
 			if err != nil {
-
+				errorChan <- err
+				ctx.Done()
 			}
 			if err := m.AddPlanet(planet); err != nil {
-
+				errorChan <- err
+				ctx.Done()
 			}
 		}(planet)
 		return nil
+	}
+	for c := range errorChan {
+		if c != nil {
+			return c
+		}
 	}
 	return nil
 }
@@ -66,6 +90,8 @@ func (m *Mongo) Generate() error {
 	return nil
 }
 
+// DeletePlanet searches if a planet exists in the mongodb collection by its id and if so
+// deletes it
 func (m *Mongo) DeletePlanet(id int) error {
 	var planet Planet
 	if err := m.Collection.FindOneAndDelete(*m.Ctx, bson.M{"id": id}).Decode(&planet); err != nil {
@@ -96,7 +122,7 @@ func (m *Mongo) AddPlanet(planet Planet) error {
 }
 
 func (m *Mongo) GetTimeOnMovies(id int) (int, error) {
-	SwapiPlanetResponse, err := swapi.GetPlanet(id)
+	SwapiPlanetResponse, err := swapi.RetrivePlanet(id)
 	if err != nil {
 		return 0, err
 	}
