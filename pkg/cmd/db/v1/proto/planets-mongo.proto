@@ -5,8 +5,9 @@ import "google/protobuf/timestamp.proto";
 
 message Planet {
     string name = 1;
-    string climate =  2;
-    repeated string terrain = 3;
-    int32 timesOnMovies = 4;
-    google.protobuf.Timestamp added_at = 5;
+    int32 id = 2;
+    string climate = 3;
+    repeated string terrain = 4;
+    int32 timesOnMovies = 5;
+    google.protobuf.Timestamp added_at = 6;
 }

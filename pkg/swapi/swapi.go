@@ -29,15 +29,16 @@ func Client(uri string) (interface{}, error) {
 	}
 	defer resp.Body.Close()
 	query := url.Query()
+	// TODO
 	switch query.Get("page") {
 	case "":
 		sr := SwapiPlanetResponse{}
-		if err := jsonpb.UnmarshalNext(json.NewDecoder(resp.Body), &SwapiPlanetResponse{}); err != nil {
+		if err := jsonpb.UnmarshalNext(json.NewDecoder(resp.Body), &sr); err != nil {
 			return sr, err
 		}
 	default:
 		sr := SwapiResponse{}
-		if err := jsonpb.UnmarshalNext(json.NewDecoder(resp.Body), &SwapiResponse{}); err != nil {
+		if err := jsonpb.UnmarshalNext(json.NewDecoder(resp.Body), &sr); err != nil {
 			return sr, err
 		}
 	}
