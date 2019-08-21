@@ -5,10 +5,9 @@ package v1
 
 import (
 	fmt "fmt"
-	math "math"
-
 	proto "github.com/golang/protobuf/proto"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
+	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -23,12 +22,12 @@ var _ = math.Inf
 const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 
 type Planet struct {
-	Name                 string               `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty" bson:"name"`
-	Id                   int32                `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty" bson:"id"`
-	Climate              string               `protobuf:"bytes,3,opt,name=climate,proto3" json:"climate,omitempty" bson:"climate"`
-	Terrain              []string             `protobuf:"bytes,4,rep,name=terrain,proto3" json:"terrain,omitempty" bson:"terrain"`
-	TimesOnMovies        int32                `protobuf:"varint,5,opt,name=timesOnMovies,proto3" json:"timesOnMovies,omitempty" bson:"times_on_movies"`
-	AddedAt              *timestamp.Timestamp `protobuf:"bytes,6,opt,name=added_at,json=addedAt,proto3" json:"added_at,omitempty" bson:"added_at"`
+	Name                 string               `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Id                   int32                `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	Climate              string               `protobuf:"bytes,3,opt,name=climate,proto3" json:"climate,omitempty"`
+	Terrain              []string             `protobuf:"bytes,4,rep,name=terrain,proto3" json:"terrain,omitempty"`
+	TimesOnMovies        int32                `protobuf:"varint,5,opt,name=timesOnMovies,proto3" json:"timesOnMovies,omitempty"`
+	AddedAt              *timestamp.Timestamp `protobuf:"bytes,6,opt,name=added_at,json=addedAt,proto3" json:"added_at,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
 	XXX_unrecognized     []byte               `json:"-"`
 	XXX_sizecache        int32                `json:"-"`

@@ -23,4 +23,5 @@ message SwapiPlanetResponse {
     string created = 12;
     string edited = 13;
     string url = 14;
+    int32 id = 15;
 }
