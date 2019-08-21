@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 
 	"github.com/golang/protobuf/jsonpb"
@@ -14,6 +15,8 @@ import (
 const (
 	planetsEndPoint = "https://swapi.co/api/planets"
 )
+
+var planetMatchPattern = regexp.MustCompile(".+/planets/([0-9]+)")
 
 // Client requests information from Swapi/planets and parses the JSON response to a proto response
 func Client(uri string) (interface{}, error) {
@@ -28,24 +31,48 @@ func Client(uri string) (interface{}, error) {
 		return nil, fmt.Errorf("Requesting to %s returned %v not 200", uri, resp.StatusCode)
 	}
 	defer resp.Body.Close()
-	query := url.Query()
-	// TODO FIX THIS SWITCH TO GET THE CORRECT VALUES
-	switch query.Get("page") {
-	case "":
-		sr := SwapiPlanetResponse{}
-		if err := jsonpb.UnmarshalNext(json.NewDecoder(resp.Body), &sr); err != nil {
-			return sr, err
-		}
-	default:
-		sr := SwapiResponse{}
-		if err := jsonpb.UnmarshalNext(json.NewDecoder(resp.Body), &sr); err != nil {
-			return sr, err
-		}
+	assertedType, err := assertResponseType(url, json.NewDecoder(resp.Body))
+	if err != nil {
+		return nil, err
 	}
-	return nil, nil
+	return assertedType, nil
 }
 
-func GetPlanet(id int) (SwapiPlanetResponse, error) {
+func assertResponseType(uri *url.URL, resp *json.Decoder) (interface{}, error) {
+	match := planetMatchPattern.Match([]byte(uri.String()))
+	if match { // a request to a planet id was used
+		sr := SwapiPlanetResponse{}
+		if err := jsonpb.UnmarshalNext(resp, &sr); err != nil {
+			return nil, err
+		}
+		id, err := getPlanetId(uri.String())
+		if err != nil {
+			return nil, err
+		}
+		sr.Id = int32(id)
+		return sr, nil
+	}
+	sr := SwapiResponse{}
+	if err := jsonpb.UnmarshalNext(resp, &sr); err != nil {
+		return nil, err
+	}
+	return sr, nil
+}
+
+func getPlanetId(uri string) (int, error) {
+	subgroups := planetMatchPattern.FindStringSubmatch(uri)
+	if len(subgroups) <= 1 {
+		return 0, fmt.Errorf("the uri %s does not have a planet id", uri)
+	}
+	id, err := strconv.Atoi(subgroups[1])
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+// RetrivePlanet requests a planet by its id from Swapi/Planets returning its data
+func RetrivePlanet(id int) (SwapiPlanetResponse, error) {
 	resp, err := Client(buildPlanetRequest(id))
 	if err != nil {
 		return resp.(SwapiPlanetResponse), err
@@ -59,7 +86,7 @@ func RetriveAllPlanets(numberOfPages int) []SwapiResponse {
 	srs := []SwapiResponse{}
 	for i := 1; i <= numberOfPages; i++ {
 		go func(page int) {
-			resp, err := Client(buildPage(page))
+			resp, err := Client(buildRequestWithPage(page))
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -80,7 +107,7 @@ func RetriveAllPlanets(numberOfPages int) []SwapiResponse {
 	return srs
 }
 
-func buildPage(page int) string {
+func buildRequestWithPage(page int) string {
 	return fmt.Sprintf("%s/?page=%s", planetsEndPoint, strconv.Itoa(page))
 }
 
