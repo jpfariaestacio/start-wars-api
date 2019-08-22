@@ -2,12 +2,15 @@ package swapi
 
 import (
 	"encoding/json"
+	"errors"
 	fmt "fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/golang/protobuf/jsonpb"
 )
@@ -16,7 +19,50 @@ const (
 	planetsEndPoint = "https://swapi.co/api/planets"
 )
 
-var planetMatchPattern = regexp.MustCompile(".+/planets/([0-9]+)")
+var (
+	timeout            = time.Duration(5 * time.Second)
+	planetMatchPattern = regexp.MustCompile(".+/planets/([0-9]+)")
+)
+
+type TimeoutTransport struct {
+	http.Transport
+	RoundTripTimeout time.Duration
+}
+
+type respAndErr struct {
+	resp *http.Response
+	err  error
+}
+
+type netTimeoutError struct {
+	error
+}
+
+func (ne netTimeoutError) Timeout() bool { return true }
+
+// If you don't set RoundTrip on TimeoutTransport, this will always timeout at 0
+func (t *TimeoutTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	timeout := time.After(t.RoundTripTimeout)
+	resp := make(chan respAndErr, 1)
+
+	go func() {
+		r, e := t.Transport.RoundTrip(req)
+		resp <- respAndErr{
+			resp: r,
+			err:  e,
+		}
+	}()
+
+	select {
+	case <-timeout: // A round trip timeout has occurred.
+		t.Transport.CancelRequest(req)
+		return nil, netTimeoutError{
+			error: fmt.Errorf("timed out after %s", t.RoundTripTimeout),
+		}
+	case r := <-resp: // Success!
+		return r.resp, r.err
+	}
+}
 
 // Client requests information from Swapi/planets and parses the JSON response to a proto response
 func Client(uri string) (interface{}, error) {
@@ -24,10 +70,21 @@ func Client(uri string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.Get(url.String())
+	client := &http.Client{
+		Transport: &TimeoutTransport{
+			Transport: http.Transport{
+				Dial: func(netw, addr string) (net.Conn, error) {
+					return net.Dial(netw, addr)
+				},
+			},
+			RoundTripTimeout: time.Second * 10,
+		},
+	}
+	resp, err := client.Get(url.String())
 	if err != nil {
 		return nil, err
 	}
+	log.Println(uri)
 	defer resp.Body.Close()
 	if planetMatchPattern.Match([]byte(uri)) && resp.StatusCode == 404 {
 		return nil, fmt.Errorf("the request to %s returned error: NotFound", uri)
@@ -35,21 +92,21 @@ func Client(uri string) (interface{}, error) {
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("Requesting to %s returned %v not 200", uri, resp.StatusCode)
 	}
-	assertedType, err := assertResponseType(url, json.NewDecoder(resp.Body))
+	assertedType, err := assertResponseType(url.String(), json.NewDecoder(resp.Body))
 	if err != nil {
 		return nil, err
 	}
 	return assertedType, nil
 }
 
-func assertResponseType(uri *url.URL, resp *json.Decoder) (interface{}, error) {
-	match := planetMatchPattern.Match([]byte(uri.String()))
+func assertResponseType(uri string, resp *json.Decoder) (interface{}, error) {
+	match := planetMatchPattern.Match([]byte(uri))
 	if match { // a request to a planet id was used
 		sr := SwapiPlanetResponse{}
 		if err := jsonpb.UnmarshalNext(resp, &sr); err != nil {
 			return nil, err
 		}
-		id, err := getPlanetID(uri.String())
+		id, err := getPlanetID(uri)
 		if err != nil {
 			return nil, err
 		}
@@ -89,11 +146,13 @@ func RetriveAllPlanets(numberOfPages int) []SwapiResponse {
 	c := make(chan SwapiResponse)
 	srs := []SwapiResponse{}
 	for i := 1; i <= numberOfPages; i++ {
+		log.Println(i)
 		go func(page int) {
 			resp, err := Client(buildRequestWithPage(page))
 			if err != nil {
 				log.Fatal(err)
 			}
+			log.Println(page)
 			c <- resp.(SwapiResponse)
 		}(i)
 	}
@@ -106,6 +165,7 @@ func RetriveAllPlanets(numberOfPages int) []SwapiResponse {
 		}
 	}(&srs)
 	for resp := range c {
+		log.Println(1)
 		srs = append(srs, resp)
 	}
 	return srs
@@ -125,5 +185,15 @@ func GetTotalPages() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return int(firstPage.(SwapiResponse).Count / 10), nil
+	count := int(firstPage.(SwapiResponse).Count)
+	switch {
+	case count == 0:
+		return 0, errors.New("can't count the number of pages to get all data from swapi/planets as it returns 0")
+	case count < 10 && count > 0:
+		return 1, nil
+	case count%10 == 0:
+		return count / 10, nil
+	default:
+		return (count / 10) + 1, nil
+	}
 }
