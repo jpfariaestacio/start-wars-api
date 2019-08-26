@@ -3,8 +3,7 @@ package v1
 import (
 	"context"
 	"encoding/json"
-	"strings"
-	"sync"
+	"errors"
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/ptypes"
@@ -43,35 +42,33 @@ func NewMongo(ctx context.Context, db *mongo.Database, collectionName string) *M
 }
 
 // Update retrives all planets from swapi/planets and update its values in the given mongo collection
-func (m *Mongo) Update(planets swapi.SwapiResponse) error {
-	var wg sync.WaitGroup
+func (m *Mongo) Update(responses []swapi.SwapiResponse) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // Make sure it's called to release resources even if no errors
-	errorChan := make(chan error, len(planets.GetResults()))
-	for _, planet := range planets.GetResults() {
-		wg.Add(1)
-		go func(swapiPlanet *swapi.SwapiPlanetResponse) {
-			defer wg.Done()
-			select {
-			case <-ctx.Done():
-				errorChan <- nil
-			default:
+	errorChan := make(chan error)
+	doneChan := make(chan struct{})
+	go func() {
+		defer ctx.Done()
+		for _, planets := range responses {
+			for _, planet := range planets.GetResults() {
+				go func(swapiPlanet *swapi.SwapiPlanetResponse) {
+					planet, err := swapiToPlanetProto(*swapiPlanet)
+					if err != nil {
+						errorChan <- err
+					}
+					if err := m.AddPlanet(planet); err != nil {
+						errorChan <- err
+					}
+				}(planet)
 			}
-			planet, err := swapiToPlanetProto(*swapiPlanet)
-			if err != nil {
-				errorChan <- err
-				ctx.Done()
-			}
-			if err := m.AddPlanet(planet); err != nil {
-				errorChan <- err
-				ctx.Done()
-			}
-		}(planet)
-		return nil
-	}
-	for c := range errorChan {
-		if c != nil {
-			return c
+		}
+	}()
+	for {
+		select {
+		case err := <-errorChan:
+			return err
+		case <-doneChan:
+			return nil
 		}
 	}
 	return nil
@@ -129,14 +126,19 @@ func (m *Mongo) AddPlanet(planet Planet) error {
 // GetTimeOnMovies requests the data from swapi/planets and parses the times on movies of
 // the given planet returing zero if the planet is not part of the swapi/planets dataset
 func (m *Mongo) GetTimeOnMovies(id int) (int, error) {
-	SwapiPlanetResponse, err := swapi.RetrivePlanet(id)
-	if strings.HasSuffix(err.Error(), "NotFound") {
-		return 0, nil
-	}
+	client := swapi.NewSwapiClient("planets")
+	resp, err := client.RetriveItem(id)
 	if err != nil {
 		return 0, err
 	}
-	return len(SwapiPlanetResponse.GetFilms()), nil
+	switch resp.(type) {
+	case *swapi.SwapiPlanetResponse:
+		return len(resp.(*swapi.SwapiPlanetResponse).GetFilms()), nil
+	default:
+		return 0, errors.New("error converting the response from swapi to proto SwapiPlanetResponse")
+	}
+
+	return 0, nil
 }
 
 // FindByID returns the planet information by searching it by id in the mongodb database

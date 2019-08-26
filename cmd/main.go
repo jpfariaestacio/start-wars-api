@@ -94,14 +94,12 @@ func main() {
 	// if err != nil {
 	// 	log.Fatal(err)
 	// }
-	tp, err := swapi.GetTotalPages()
-	if err != nil {
-		log.Fatal(err)
-	}
-	allValues := swapi.RetriveAllPlanets(tp)
-	for _, v := range allValues {
-		for _, v1 := range v.GetResults() {
-			fmt.Println(v1)
-		}
-	}
+	sc := swapi.NewSwapiClient("planets")
+	log.Println(sc.RetriveAll())
+	// allValues := swapi.RetriveAllPlanets(tp)
+	// for _, v := range allValues {
+	// 	for _, v1 := range v.GetResults() {
+	// 		fmt.Println(v1)
+	// 	}
+	// }
 }
