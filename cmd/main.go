@@ -2,13 +2,16 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 
+	server "github.com/nicolasassi/starWarsApi/pkg/api/v1"
 	"github.com/nicolasassi/starWarsApi/pkg/cmd/db"
+	mongov1 "github.com/nicolasassi/starWarsApi/pkg/cmd/db/v1"
 	"github.com/nicolasassi/starWarsApi/pkg/swapi"
 )
 
@@ -40,30 +43,8 @@ func init() {
 	flag.StringVar(&cfg.DBPassword, "db-password", "", "Database password")
 	flag.StringVar(&cfg.DBPort, "db-port", "27017", "Database port")
 	flag.StringVar(&cfg.DBName, "db-name", "star_wars_db_v1", "Database name")
-	flag.BoolVar(&cfg.DBGenerate, "db-generate", false, "// If true initialize the MongoDB database with default data and schema")
 	flag.BoolVar(&cfg.DBUpdate, "db-update", false, "If true updates values in the MongoDB by comparing with those in https://swapi.co/")
 	flag.Parse()
-}
-
-func init() {
-	if cfg.DBGenerate {
-		warningMessageRaw, ok := os.LookupEnv("DB-GENERATE-WARNING-MESSAGE")
-		if !ok {
-			log.Fatal("error in your .ENV file")
-		}
-		warningMessage := strings.Split(warningMessageRaw, "%s")
-		fmt.Println(warningMessage[0], cfg.DBName, warningMessage[1])
-		fmt.Scan(&userResp)
-		switch userResp {
-		case "y":
-		case "n":
-			cfg.DBGenerate = false
-			fmt.Println("db-generate set to FALSE")
-		default:
-			fmt.Println("Invalid input " + userResp)
-			os.Exit(0)
-		}
-	}
 }
 
 func init() {
@@ -77,6 +58,27 @@ func init() {
 		fmt.Scan(&userResp)
 		switch userResp {
 		case "y":
+			ctx := context.Background()
+			defer ctx.Done()
+			dbm, err := cfg.Connect(ctx)
+			if err != nil {
+				log.Fatal(err)
+			}
+			sc := swapi.NewSwapiClient("planets")
+			utils := db.NewUtils(1, dbm, "planets")
+			all, err := sc.RetriveAll()
+			if err != nil {
+				log.Fatal(err)
+			}
+			var responses []*swapi.SwapiResponse
+			for _, obj := range all {
+				if resp, ok := obj.(*swapi.SwapiResponse); ok {
+					responses = append(responses, resp)
+				}
+			}
+			if err := utils.Update(responses); err != nil {
+				log.Fatal(err)
+			}
 		case "n":
 			cfg.DBUpdate = false
 			fmt.Println("db-update set to FALSE")
@@ -89,17 +91,13 @@ func init() {
 }
 
 func main() {
-	// ctx := context.Background()
-	// db, err := cfg.Connect(ctx)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	sc := swapi.NewSwapiClient("planets")
-	log.Println(sc.RetriveAll())
-	// allValues := swapi.RetriveAllPlanets(tp)
-	// for _, v := range allValues {
-	// 	for _, v1 := range v.GetResults() {
-	// 		fmt.Println(v1)
-	// 	}
-	// }
+
+	ctx := context.Background()
+	defer ctx.Done()
+	dbm, err := cfg.Connect(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	m := mongov1.NewMongo(ctx, dbm, "planets")
+	server.Serve(m)
 }

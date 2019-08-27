@@ -33,11 +33,11 @@ func (cfg Config) Connect(ctx context.Context) (*mongo.Database, error) {
 
 	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
 	if err != nil {
-		return nil, fmt.Errorf("todo: couldn't connect to mongo: %v", err)
+		return nil, fmt.Errorf("couldn't connect to mongo: %v", err)
 	}
 	err = client.Connect(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("todo: mongo client couldn't connect with background context: %v", err)
+		return nil, fmt.Errorf("mongo client couldn't connect with background context: %v", err)
 	}
 
 	starWarsDB := client.Database(cfg.DBName)

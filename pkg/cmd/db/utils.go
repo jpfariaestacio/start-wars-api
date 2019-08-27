@@ -13,8 +13,7 @@ const (
 )
 
 type Utils interface {
-	Generate() error
-	Update(planets swapi.SwapiResponse) error
+	Update(planets []*swapi.SwapiResponse) error
 	GetTimeOnMovies(id int) (int, error)
 }
 

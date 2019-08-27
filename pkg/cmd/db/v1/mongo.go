@@ -1,9 +1,13 @@
-package v1
+package mongov1
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	fmt "fmt"
+	"log"
+	"strings"
+	"sync"
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/ptypes"
@@ -11,6 +15,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
+
+var once sync.Once
 
 // Handler abstracts the methods to interact with a mongo collection
 type Handler interface {
@@ -42,52 +48,58 @@ func NewMongo(ctx context.Context, db *mongo.Database, collectionName string) *M
 }
 
 // Update retrives all planets from swapi/planets and update its values in the given mongo collection
-func (m *Mongo) Update(responses []swapi.SwapiResponse) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel() // Make sure it's called to release resources even if no errors
+func (m *Mongo) Update(responses []*swapi.SwapiResponse) error {
 	errorChan := make(chan error)
+	var wg sync.WaitGroup
 	doneChan := make(chan struct{})
 	go func() {
-		defer ctx.Done()
 		for _, planets := range responses {
 			for _, planet := range planets.GetResults() {
+				wg.Add(1)
+				once.Do(func() {
+					go func() {
+						wg.Wait()
+						doneChan <- struct{}{}
+					}()
+				})
 				go func(swapiPlanet *swapi.SwapiPlanetResponse) {
+					defer wg.Done()
 					planet, err := swapiToPlanetProto(*swapiPlanet)
 					if err != nil {
 						errorChan <- err
 					}
-					if err := m.AddPlanet(planet); err != nil {
+					if err := m.updatePlanet(planet); err != nil {
 						errorChan <- err
 					}
+					log.Println(planet.GetName())
 				}(planet)
 			}
 		}
 	}()
-	for {
-		select {
-		case err := <-errorChan:
-			return err
-		case <-doneChan:
-			return nil
-		}
+
+	select {
+	case err := <-errorChan:
+		return err
+	case <-doneChan:
+		return nil
 	}
-	return nil
+
 }
 
 func swapiToPlanetProto(swapiPlanet swapi.SwapiPlanetResponse) (Planet, error) {
 	planet := Planet{}
+	intID, err := swapiPlanet.GetIDFromURL(swapiPlanet.GetUrl())
+	if err != nil {
+		return planet, err
+	}
+	swapiPlanet.Id = intID
 	b, err := json.Marshal(swapiPlanet)
 	if err != nil {
 		return planet, err
 	}
 	jsonpb.UnmarshalString(string(b), &planet)
+	planet.Terrain = strings.Split(strings.TrimSpace(swapiPlanet.GetTerrain()), ",")
 	return planet, nil
-}
-
-// Generate creates a new database by using the given database name and default data
-// TODO
-func (m *Mongo) Generate() error {
-	return nil
 }
 
 // DeletePlanet searches if a planet exists in the mongodb collection by its id and if so
@@ -103,9 +115,9 @@ func (m *Mongo) DeletePlanet(id int) error {
 // AddPlanet checks if the planet data already is a document in the mongodb
 // by checking the planet name
 func (m *Mongo) AddPlanet(planet Planet) error {
-	p, err := m.FindByName(planet.GetName())
-	if err != nil {
-		return err
+	_, err := m.FindByName(planet.GetName())
+	if err == nil {
+		return errors.New("the planet already exist in the database")
 	}
 	timeOfMovies, err := m.GetTimeOnMovies(int(planet.GetId()))
 	if err != nil {
@@ -113,13 +125,24 @@ func (m *Mongo) AddPlanet(planet Planet) error {
 	}
 	planet.TimesOnMovies = int32(timeOfMovies)
 	planet.AddedAt = ptypes.TimestampNow()
-	if p == new(Planet) {
-		m.Collection.InsertOne(*m.Ctx, planet)
-		return nil
-	}
-	if err := m.Collection.FindOneAndUpdate(*m.Ctx, bson.M{"name": p.GetName()}, planet).Decode(&p); err != nil {
+	if _, err := m.Collection.InsertOne(*m.Ctx, planet); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (m *Mongo) updatePlanet(planet Planet) error {
+	p, err := m.FindByName(planet.GetName())
+	if err != nil {
+		return fmt.Errorf("could not update the planet %s", planet.GetName())
+	}
+	timeOfMovies, err := m.GetTimeOnMovies(int(planet.GetId()))
+	if err != nil {
+		return err
+	}
+	planet.TimesOnMovies = int32(timeOfMovies)
+	planet.AddedAt = ptypes.TimestampNow()
+	m.Collection.FindOneAndUpdate(*m.Ctx, bson.M{"name": p.GetName()}, bson.M{"$set": planet})
 	return nil
 }
 
@@ -137,8 +160,6 @@ func (m *Mongo) GetTimeOnMovies(id int) (int, error) {
 	default:
 		return 0, errors.New("error converting the response from swapi to proto SwapiPlanetResponse")
 	}
-
-	return 0, nil
 }
 
 // FindByID returns the planet information by searching it by id in the mongodb database

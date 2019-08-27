@@ -19,7 +19,7 @@ const (
 )
 
 var (
-	timeout = time.Duration(20 * time.Second)
+	timeout = time.Duration(60 * time.Second)
 )
 
 // TimeoutTransport sets the values for timeout
@@ -231,7 +231,7 @@ func getCount(obj ProtoObj) int {
 }
 
 func (sc *Client) buildItemRequestURL(id int) string {
-	return fmt.Sprintf("%s/%s/%s", planetsEndPoint, sc.requestType, strconv.Itoa(id))
+	return fmt.Sprintf("%s%s/%s", planetsEndPoint, sc.requestType, strconv.Itoa(id))
 }
 
 func (sc *Client) buildItemsRequestURL(page int) string {
