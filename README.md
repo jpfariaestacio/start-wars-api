@@ -1,4 +1,4 @@
-# startWarsApi
+# star-wars-api
 
 This repo aims to be a simple service to consume https://swapi.co/ data and store it in a MongoDB (local or not) instance.
 
